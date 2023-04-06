@@ -4,12 +4,21 @@ import json
 import communication
 import hashlib
 
-clients = []
+CURSOR_UP = '\033[F'
+
+users = {}
 messages = []
+
+DEFAULT_CHANNEL = "general"
+
+
+class user():
+    def __init__(self, username):
+        self.username = username
+        self.channel = DEFAULT_CHANNEL
 
 
 async def echo(websocket):
-    clients.append(websocket)
     async for packet in websocket:
         packet = communication.packet(packet)
         match type(packet):
@@ -25,14 +34,54 @@ async def echo(websocket):
                 print(f" oops! we got a {type(packet)}.")
 
 
+async def logoffHandler(websocket):
+    await websocket.wait_closed()
+    print(f"{users[websocket].username} just logged off!")
+    # if we reach this point, the connection has closed
+    # we can now remove them from the users list
+    del users[websocket]
+
+
 async def messageHandler(websocket, packet: communication.message):
     messages.append(packet)
     print(packet.json)
-    websockets.broadcast(clients, packet.json)  # type: ignore
+    # reconstruct packet in case of tampering
+    message = communication.message()
+    message.username = users[websocket].username
+    message.text = packet.text
+
+    for user in users:
+        # if we are in the same channel
+        if users[user].channel == users[websocket].channel:
+            await user.send(message.json)
 
 
 async def commandHandler(websocket, packet: communication.command):
-    pass
+    match packet.name:
+        case "switch":
+            users[websocket].channel = packet.args[0]
+            message = communication.message()
+            message.text = f"You have switched to {packet.args[0]}"
+            message.username = f"{CURSOR_UP}SYSTEM"
+            await websocket.send(message.json)
+        case "list":
+            userlist = "Logged in users are: "
+            channeluserlist = "Users currently in your channel are: "
+            # get all of the users
+            for userwebsocket in users:
+                # add them to the message
+                userlist += f"{users[userwebsocket].username}, "
+                # if they are in the same channel
+                if users[userwebsocket].channel == users[websocket].channel:
+                    channeluserlist += f"{users[userwebsocket].username}, "
+            # remove the last commas
+            userlist = userlist.removesuffix(", ")
+            channeluserlist = channeluserlist.removesuffix(", ")
+            # prepare and send the message
+            message = communication.message()
+            message.username = f"{CURSOR_UP}SYSTEM"
+            message.text = f"{userlist}\n{channeluserlist}"
+            await websocket.send(message.json)
 
 
 async def loginHandler(websocket, packet: communication.loginRequest):
@@ -40,7 +89,18 @@ async def loginHandler(websocket, packet: communication.loginRequest):
     database = json.load(open("users.json", "r"))
     if packet.username in database:
         if database[packet.username] == hashlib.sha256(packet.password.encode()).hexdigest():
-            result.result = True
+            # correct username and password
+            for userwebsocket in users:
+                if users[userwebsocket].username == packet.username:
+                    # if they are already logged in from another location
+                    result.result = False
+                    result.reason = "You are already logged in from another location."
+                    break
+            else:
+                users[websocket] = user(packet.username)
+                asyncio.create_task(logoffHandler(websocket))
+                result.result = True
+
         else:
             result.result = False
             result.reason = "Incorrect password"
@@ -55,11 +115,11 @@ async def signupHandler(websocket, packet: communication.signupRequest):
     database = json.load(open("users.json", "r"))
     if packet.username not in database:
         result.result = True
-        database[packet.username] = hashlib.sha256(
-            packet.password.encode()).hexdigest()
+        passwordhash = hashlib.sha256(packet.password.encode()).hexdigest()
+        database[packet.username] = passwordhash
         with open("users.json", "w") as f:
             json.dump(database, f)
-
+        users[websocket] = user(packet.username)
     else:
         result.result = False
         result.reason = "Username is already in use"
