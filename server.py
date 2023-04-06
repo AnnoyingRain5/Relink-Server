@@ -14,21 +14,21 @@ async def echo(websocket):
         packet = communication.packet(packet)
         match type(packet):
             case communication.message:
-                await messageHandler(websocket, packet)
+                await messageHandler(websocket, packet)  # type: ignore
             case communication.command:
-                await commandHandler(websocket, packet)
+                await commandHandler(websocket, packet)  # type: ignore
             case communication.loginRequest:
-                await loginHandler(websocket, packet)
+                await loginHandler(websocket, packet)  # type: ignore
             case communication.signupRequest:
-                await signupHandler(websocket, packet)
+                await signupHandler(websocket, packet)  # type: ignore
             case _:
-                print(type(packet))
+                print(f" oops! we got a {type(packet)}.")
 
 
 async def messageHandler(websocket, packet: communication.message):
     messages.append(packet)
     print(packet.json)
-    websockets.broadcast(clients, packet.json)
+    websockets.broadcast(clients, packet.json)  # type: ignore
 
 
 async def commandHandler(websocket, packet: communication.command):
@@ -39,7 +39,6 @@ async def loginHandler(websocket, packet: communication.loginRequest):
     result = communication.result()
     database = json.load(open("users.json", "r"))
     if packet.username in database:
-        print(hashlib.sha256(packet.password.encode()).hexdigest())
         if database[packet.username] == hashlib.sha256(packet.password.encode()).hexdigest():
             result.result = True
         else:
@@ -56,19 +55,19 @@ async def signupHandler(websocket, packet: communication.signupRequest):
     database = json.load(open("users.json", "r"))
     if packet.username not in database:
         result.result = True
-        print(hashlib.sha256(packet.password.encode()).hexdigest())
         database[packet.username] = hashlib.sha256(
             packet.password.encode()).hexdigest()
-        json.dump(database, open("users.json", "w"))
+        with open("users.json", "w") as f:
+            json.dump(database, f)
 
     else:
         result.result = False
-        result.reason = "Username already in database"
+        result.reason = "Username is already in use"
     await websocket.send(result.json)
 
 
 async def main():
-    async with websockets.serve(echo, "0.0.0.0", 8765):
+    async with websockets.serve(echo, "0.0.0.0", 8765):  # type: ignore
         await asyncio.Future()  # run forever
 
 asyncio.run(main())
