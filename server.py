@@ -59,29 +59,37 @@ async def messageHandler(websocket, packet: communication.message):
 async def commandHandler(websocket, packet: communication.command):
     match packet.name:
         case "switch":
-            users[websocket].channel = packet.args[0]
-            message = communication.message()
-            message.text = f"You have switched to {packet.args[0]}"
-            message.username = f"{CURSOR_UP}SYSTEM"
-            await websocket.send(message.json)
+            await switchcommand(websocket, packet)
         case "list":
-            userlist = "Logged in users are: "
-            channeluserlist = "Users currently in your channel are: "
-            # get all of the users
-            for userwebsocket in users:
-                # add them to the message
-                userlist += f"{users[userwebsocket].username}, "
-                # if they are in the same channel
-                if users[userwebsocket].channel == users[websocket].channel:
-                    channeluserlist += f"{users[userwebsocket].username}, "
-            # remove the last commas
-            userlist = userlist.removesuffix(", ")
-            channeluserlist = channeluserlist.removesuffix(", ")
-            # prepare and send the message
-            message = communication.message()
-            message.username = f"{CURSOR_UP}SYSTEM"
-            message.text = f"{userlist}\n{channeluserlist}"
-            await websocket.send(message.json)
+            await listcommand(websocket, packet)
+
+
+async def switchcommand(websocket, packet: communication.command):
+    users[websocket].channel = packet.args[0]
+    message = communication.message()
+    message.text = f"You have switched to {packet.args[0]}"
+    message.username = f"{CURSOR_UP}SYSTEM"
+    await websocket.send(message.json)
+
+
+async def listcommand(websocket, packet: communication.command):
+    userlist = "Logged in users are: "
+    channeluserlist = "Users currently in your channel are: "
+    # get all of the users
+    for userwebsocket in users:
+        # add them to the message
+        userlist += f"{users[userwebsocket].username}, "
+        # if they are in the same channel
+        if users[userwebsocket].channel == users[websocket].channel:
+            channeluserlist += f"{users[userwebsocket].username}, "
+    # remove the last commas
+    userlist = userlist.removesuffix(", ")
+    channeluserlist = channeluserlist.removesuffix(", ")
+    # prepare and send the message
+    message = communication.message()
+    message.username = f"{CURSOR_UP}SYSTEM"
+    message.text = f"{userlist}\n{channeluserlist}"
+    await websocket.send(message.json)
 
 
 async def loginHandler(websocket, packet: communication.loginRequest):
