@@ -66,9 +66,9 @@ async def commandHandler(websocket, packet: communication.command):
 
 async def switchcommand(websocket, packet: communication.command):
     users[websocket].channel = packet.args[0]
-    message = communication.message()
+    message = communication.system()
     message.text = f"You have switched to {packet.args[0]}"
-    message.username = f"{CURSOR_UP}SYSTEM"
+    message.response = True
     await websocket.send(message.json)
 
 
@@ -86,9 +86,9 @@ async def listcommand(websocket, packet: communication.command):
     userlist = userlist.removesuffix(", ")
     channeluserlist = channeluserlist.removesuffix(", ")
     # prepare and send the message
-    message = communication.message()
-    message.username = f"{CURSOR_UP}SYSTEM"
+    message = communication.system()
     message.text = f"{userlist}\n{channeluserlist}"
+    message.response = True
     await websocket.send(message.json)
 
 
