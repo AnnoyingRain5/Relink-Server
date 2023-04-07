@@ -36,10 +36,16 @@ async def echo(websocket):
 
 async def logoffHandler(websocket):
     await websocket.wait_closed()
-    print(f"{users[websocket].username} just logged off!")
     # if we reach this point, the connection has closed
     # we can now remove them from the users list
+    # announce to all users in the channel
+    logoffuser = users[websocket]
     del users[websocket]
+    for userwebsocket in users:
+        if users[userwebsocket].channel == logoffuser.channel:  # same channel
+            message = communication.system()
+            message.text = f"{logoffuser.username} just logged off"
+            await userwebsocket.send(message.json)
 
 
 async def messageHandler(websocket, packet: communication.message):
@@ -62,6 +68,23 @@ async def commandHandler(websocket, packet: communication.command):
             await switchcommand(websocket, packet)
         case "list":
             await listcommand(websocket, packet)
+        case "help":
+            await helpcommand(websocket, packet)
+        case _:
+            message = communication.system()
+            message.text = "Unknown command."
+            message.response = True
+            await websocket.send(message.json)
+
+
+async def helpcommand(websocket, packet: communication.command):
+    message = communication.system()
+    message.text = "Registered commands are as follows:\n"
+    message.text += "/switch <channel>\n"
+    message.text += "/list\n"
+    message.text += "/help\n"
+    message.response = True
+    await websocket.send(message.json)
 
 
 async def switchcommand(websocket, packet: communication.command):
