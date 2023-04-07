@@ -73,7 +73,6 @@ async def commandHandler(websocket, packet: communication.command):
         case _:
             message = communication.system()
             message.text = "Unknown command."
-            message.response = True
             await websocket.send(message.json)
 
 
@@ -82,16 +81,16 @@ async def helpcommand(websocket, packet: communication.command):
     message.text = "Registered commands are as follows:\n"
     message.text += "/switch <channel>\n"
     message.text += "/list\n"
-    message.text += "/help\n"
-    message.response = True
+    message.text += "/help"
     await websocket.send(message.json)
 
 
 async def switchcommand(websocket, packet: communication.command):
+    # switch the channel
     users[websocket].channel = packet.args[0]
-    message = communication.system()
-    message.text = f"You have switched to {packet.args[0]}"
-    message.response = True
+    # tell the client that the channel has changed
+    message = communication.channelChange()
+    message.channel = packet.args[0]
     await websocket.send(message.json)
 
 
@@ -111,7 +110,6 @@ async def listcommand(websocket, packet: communication.command):
     # prepare and send the message
     message = communication.system()
     message.text = f"{userlist}\n{channeluserlist}"
-    message.response = True
     await websocket.send(message.json)
 
 
@@ -139,6 +137,10 @@ async def loginHandler(websocket, packet: communication.loginRequest):
         result.result = False
         result.reason = "Username not found"
     await websocket.send(result.json)
+    if result.result == True:
+        message = communication.channelChange()
+        message.channel = DEFAULT_CHANNEL
+        await websocket.send(message.json)
 
 
 async def signupHandler(websocket, packet: communication.signupRequest):
