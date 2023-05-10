@@ -173,6 +173,9 @@ async def signupHandler(websocket, packet: communication.signupRequest):
         with open("users.json", "w") as f:
             json.dump(database, f)
         users[websocket] = user(packet.username)
+        message = communication.channelChange()
+        message.channel = DEFAULT_CHANNEL
+        await websocket.send(message.json)
     else:
         result.result = False
         result.reason = "Username is already in use"
