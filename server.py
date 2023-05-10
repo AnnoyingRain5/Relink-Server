@@ -1,24 +1,23 @@
 import asyncio
-import websockets
 import json
-import communication
 import hashlib
 import re
-import websockets.server
+import websockets
+import communication
 
 
 CURSOR_UP = '\033[F'
 DEFAULT_CHANNEL = "general"
 
 
-class user():
+class User():
     def __init__(self, username):
         self.username = username
         self.channel = DEFAULT_CHANNEL
 
 
 users: dict[websockets.server.WebSocketServerProtocol,  # type: ignore
-            user] = {}
+            User] = {}
 messages = []
 
 
@@ -26,16 +25,16 @@ async def echo(websocket):
     async for packet in websocket:
         packet = communication.packet(packet)
         match type(packet):
-            case communication.message:
+            case communication.Message:
                 await messageHandler(websocket, packet)  # type: ignore
-            case communication.command:
+            case communication.Command:
                 await commandHandler(websocket, packet)  # type: ignore
-            case communication.loginRequest:
+            case communication.LoginRequest:
                 await loginHandler(websocket, packet)  # type: ignore
-            case communication.signupRequest:
+            case communication.SignupRequest:
                 await signupHandler(websocket, packet)  # type: ignore
             case _:
-                print(f" oops! we got a {type(packet)}.")
+                print(f"oops! we got a {type(packet)}.")
 
 
 async def logoffHandler(websocket):
@@ -45,44 +44,43 @@ async def logoffHandler(websocket):
     # announce to all users in the channel
     logoffuser = users[websocket]
     del users[websocket]
-    for userwebsocket in users:
-        if users[userwebsocket].channel == logoffuser.channel:  # same channel
-            message = communication.system()
+    for userWebsocket, user in users.items():
+        if user.channel == logoffuser.channel:  # same channel
+            message = communication.System()
             message.text = f"{logoffuser.username} just logged off"
-            await userwebsocket.send(message.json)
+            await userWebsocket.send(message.json)
 
 
-async def messageHandler(websocket, message: communication.message):
+async def messageHandler(websocket, message: communication.Message):
     messages.append(message)
     print(message.json)
     # reconstruct packet in case of tampering
     message.username = users[websocket].username
     if message.isDM:
-        for user in users:
+        for userWebsocket, user in users.items():
             # if they are the correct user
-            if f"@{users[user].username}" == users[websocket].channel:
-                await user.send(message.json)
+            if f"@{user.username}" == users[websocket].channel:
+                await userWebsocket.send(message.json)
                 await websocket.send(message.json)
                 break
         else:
-            sysmessage = communication.system()
+            sysmessage = communication.System()
             sysmessage.text = f"Failed to send DM: user {users[websocket].channel} is offline or does not exist."
             await websocket.send(sysmessage.json)
-
     else:
         mentions = re.findall("@\\S\\S*", message.text)
-        for user in users:
+        for userWebsocket, user in users.items():
             # if we are in the same channel
-            if users[user].channel == users[websocket].channel:
-                await user.send(message.json)
-            if f"@{users[user].username}" in mentions:
-                notificiation = communication.notification()
+            if user.channel == users[websocket].channel:
+                await userWebsocket.send(message.json)
+            if f"@{user.username}" in mentions:
+                notificiation = communication.Notification()
                 notificiation.location = users[websocket].channel
                 notificiation.type = "mention"
-                await user.send(notificiation.json)
+                await userWebsocket.send(notificiation.json)
 
 
-async def commandHandler(websocket, packet: communication.command):
+async def commandHandler(websocket, packet: communication.Command):
     match packet.name:
         case "switch":
             await switchcommand(websocket, packet)
@@ -91,13 +89,13 @@ async def commandHandler(websocket, packet: communication.command):
         case "help":
             await helpcommand(websocket, packet)
         case _:
-            message = communication.system()
+            message = communication.System()
             message.text = "Unknown command."
             await websocket.send(message.json)
 
 
-async def helpcommand(websocket, packet: communication.command):
-    message = communication.system()
+async def helpcommand(websocket, packet: communication.Command):
+    message = communication.System()
     message.text = "Registered commands are as follows:\n"
     message.text += "/switch <channel>\n"
     message.text += "/list\n"
@@ -105,48 +103,48 @@ async def helpcommand(websocket, packet: communication.command):
     await websocket.send(message.json)
 
 
-async def switchcommand(websocket, packet: communication.command):
+async def switchcommand(websocket, packet: communication.Command):
     # switch the channel
     users[websocket].channel = packet.args[0]
     # tell the client that the channel has changed
-    message = communication.channelChange()
+    message = communication.ChannelChange()
     message.channel = packet.args[0]
     await websocket.send(message.json)
 
 
-async def listcommand(websocket, packet: communication.command):
+async def listcommand(websocket, packet: communication.Command):
     userlist = "Logged in users are: "
     channeluserlist = "Users currently in your channel are: "
     # get all of the users
-    for userwebsocket in users:
+    for _, otherUser in users.items():
         # add them to the message
-        userlist += f"{users[userwebsocket].username}, "
+        userlist += f"{otherUser.username}, "
         # if they are in the same channel
-        if users[userwebsocket].channel == users[websocket].channel:
-            channeluserlist += f"{users[userwebsocket].username}, "
+        if otherUser.channel == users[websocket].channel:
+            channeluserlist += f"{otherUser.username}, "
     # remove the last commas
     userlist = userlist.removesuffix(", ")
     channeluserlist = channeluserlist.removesuffix(", ")
     # prepare and send the message
-    message = communication.system()
+    message = communication.System()
     message.text = f"{userlist}\n{channeluserlist}"
     await websocket.send(message.json)
 
 
-async def loginHandler(websocket, packet: communication.loginRequest):
-    result = communication.result()
-    database = json.load(open("users.json", "r"))
+async def loginHandler(websocket, packet: communication.LoginRequest):
+    result = communication.Result()
+    database = json.load(open("users.json", "r", encoding="utf-8"))
     if packet.username in database:
         if database[packet.username] == hashlib.sha256(packet.password.encode()).hexdigest():
             # correct username and password
-            for userwebsocket in users:
-                if users[userwebsocket].username == packet.username:
+            for _, user in users.items():
+                if user.username == packet.username:
                     # if they are already logged in from another location
                     result.result = False
                     result.reason = "You are already logged in from another location."
                     break
             else:
-                users[websocket] = user(packet.username)
+                users[websocket] = User(packet.username)
                 asyncio.create_task(logoffHandler(websocket))
                 result.result = True
 
@@ -157,23 +155,23 @@ async def loginHandler(websocket, packet: communication.loginRequest):
         result.result = False
         result.reason = "Username not found"
     await websocket.send(result.json)
-    if result.result == True:
-        message = communication.channelChange()
+    if result.result:
+        message = communication.ChannelChange()
         message.channel = DEFAULT_CHANNEL
         await websocket.send(message.json)
 
 
-async def signupHandler(websocket, packet: communication.signupRequest):
-    result = communication.result()
-    database = json.load(open("users.json", "r"))
+async def signupHandler(websocket, packet: communication.SignupRequest):
+    result = communication.Result()
+    database = json.load(open("users.json", "r", encoding="utf-8"))
     if packet.username not in database:
         result.result = True
         passwordhash = hashlib.sha256(packet.password.encode()).hexdigest()
         database[packet.username] = passwordhash
-        with open("users.json", "w") as f:
+        with open("users.json", "w", encoding="utf-8") as f:
             json.dump(database, f)
-        users[websocket] = user(packet.username)
-        message = communication.channelChange()
+        users[websocket] = User(packet.username)
+        message = communication.ChannelChange()
         message.channel = DEFAULT_CHANNEL
         await websocket.send(message.json)
     else:
