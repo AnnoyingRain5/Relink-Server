@@ -52,23 +52,34 @@ async def logoffHandler(websocket):
             await userwebsocket.send(message.json)
 
 
-async def messageHandler(websocket, packet: communication.message):
-    messages.append(packet)
-    print(packet.json)
+async def messageHandler(websocket, message: communication.message):
+    messages.append(message)
+    print(message.json)
     # reconstruct packet in case of tampering
-    message = communication.message()
     message.username = users[websocket].username
-    message.text = packet.text
-    mentions = re.findall("@\\S\\S*", message.text)
-    for user in users:
-        # if we are in the same channel
-        if users[user].channel == users[websocket].channel:
-            await user.send(message.json)
-        if f"@{users[user].username}" in mentions:
-            notificiation = communication.notification()
-            notificiation.location = users[websocket].channel
-            notificiation.type = "mention"
-            await user.send(notificiation.json)
+    if message.isDM:
+        for user in users:
+            # if they are the correct user
+            if f"@{users[user].username}" == users[websocket].channel:
+                await user.send(message.json)
+                await websocket.send(message.json)
+                break
+        else:
+            sysmessage = communication.system()
+            sysmessage.text = f"Failed to send DM: user {users[websocket].channel} is offline or does not exist."
+            await websocket.send(sysmessage.json)
+
+    else:
+        mentions = re.findall("@\\S\\S*", message.text)
+        for user in users:
+            # if we are in the same channel
+            if users[user].channel == users[websocket].channel:
+                await user.send(message.json)
+            if f"@{users[user].username}" in mentions:
+                notificiation = communication.notification()
+                notificiation.location = users[websocket].channel
+                notificiation.type = "mention"
+                await user.send(notificiation.json)
 
 
 async def commandHandler(websocket, packet: communication.command):
