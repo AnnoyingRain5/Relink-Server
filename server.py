@@ -3,7 +3,7 @@ import json
 import hashlib
 import re
 import websockets
-import websockets.server
+from websockets.server import WebSocketServerProtocol as WebsocketProtocol
 import communication
 
 
@@ -17,8 +17,7 @@ class User():
         self.channel = DEFAULT_CHANNEL
 
 
-users: dict[websockets.server.WebSocketServerProtocol,  # type: ignore
-            User] = {}
+users: dict[WebsocketProtocol, User] = {}
 messages = []
 
 
@@ -52,7 +51,7 @@ async def logoffHandler(websocket):
             await userWebsocket.send(message.json)
 
 
-async def messageHandler(websocket, message: communication.Message):
+async def messageHandler(websocket: WebsocketProtocol, message: communication.Message):
     messages.append(message)
     print(message.json)
     # reconstruct packet in case of tampering
@@ -81,7 +80,7 @@ async def messageHandler(websocket, message: communication.Message):
                 await userWebsocket.send(notificiation.json)
 
 
-async def commandHandler(websocket, packet: communication.Command):
+async def commandHandler(websocket: WebsocketProtocol, packet: communication.Command):
     match packet.name:
         case "switch":
             await switchcommand(websocket, packet)
@@ -95,7 +94,7 @@ async def commandHandler(websocket, packet: communication.Command):
             await websocket.send(message.json)
 
 
-async def helpcommand(websocket, packet: communication.Command):
+async def helpcommand(websocket: WebsocketProtocol, packet: communication.Command):
     message = communication.System()
     message.text = "Registered commands are as follows:\n"
     message.text += "/switch <channel>\n"
@@ -104,7 +103,7 @@ async def helpcommand(websocket, packet: communication.Command):
     await websocket.send(message.json)
 
 
-async def switchcommand(websocket, packet: communication.Command):
+async def switchcommand(websocket: WebsocketProtocol, packet: communication.Command):
     # switch the channel
     users[websocket].channel = packet.args[0]
     # tell the client that the channel has changed
@@ -113,7 +112,7 @@ async def switchcommand(websocket, packet: communication.Command):
     await websocket.send(message.json)
 
 
-async def listcommand(websocket, packet: communication.Command):
+async def listcommand(websocket: WebsocketProtocol, packet: communication.Command):
     userlist = "Logged in users are: "
     channeluserlist = "Users currently in your channel are: "
     # get all of the users
@@ -132,7 +131,7 @@ async def listcommand(websocket, packet: communication.Command):
     await websocket.send(message.json)
 
 
-async def loginHandler(websocket, packet: communication.LoginRequest):
+async def loginHandler(websocket: WebsocketProtocol, packet: communication.LoginRequest):
     result = communication.Result()
     database = json.load(open("users.json", "r", encoding="utf-8"))
     if packet.username in database:
@@ -162,7 +161,7 @@ async def loginHandler(websocket, packet: communication.LoginRequest):
         await websocket.send(message.json)
 
 
-async def signupHandler(websocket, packet: communication.SignupRequest):
+async def signupHandler(websocket: WebsocketProtocol, packet: communication.SignupRequest):
     result = communication.Result()
     database = json.load(open("users.json", "r", encoding="utf-8"))
     if packet.username not in database:
