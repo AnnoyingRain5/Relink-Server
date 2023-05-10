@@ -3,12 +3,11 @@ import websockets
 import json
 import communication
 import hashlib
+import re
+import websockets.server
+
 
 CURSOR_UP = '\033[F'
-
-users = {}
-messages = []
-
 DEFAULT_CHANNEL = "general"
 
 
@@ -16,6 +15,11 @@ class user():
     def __init__(self, username):
         self.username = username
         self.channel = DEFAULT_CHANNEL
+
+
+users: dict[websockets.server.WebSocketServerProtocol,  # type: ignore
+            user] = {}
+messages = []
 
 
 async def echo(websocket):
@@ -55,11 +59,16 @@ async def messageHandler(websocket, packet: communication.message):
     message = communication.message()
     message.username = users[websocket].username
     message.text = packet.text
-
+    mentions = re.findall("@\\S\\S*", message.text)
     for user in users:
         # if we are in the same channel
         if users[user].channel == users[websocket].channel:
             await user.send(message.json)
+        if f"@{users[user].username}" in mentions:
+            notificiation = communication.notification()
+            notificiation.location = users[websocket].channel
+            notificiation.type = "mention"
+            await user.send(notificiation.json)
 
 
 async def commandHandler(websocket, packet: communication.command):
