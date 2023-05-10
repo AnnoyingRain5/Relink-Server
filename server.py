@@ -21,7 +21,7 @@ users: dict[WebsocketProtocol, User] = {}
 messages = []
 
 
-async def echo(websocket):
+async def server(websocket):
     async for packet in websocket:
         packet = communication.packet(packet)
         match type(packet):
@@ -181,7 +181,7 @@ async def signupHandler(websocket: WebsocketProtocol, packet: communication.Sign
 
 
 async def main():
-    async with websockets.serve(echo, "0.0.0.0", 8765):  # type: ignore
+    async with websockets.serve(server, "0.0.0.0", 8765):  # type: ignore
         await asyncio.Future()  # run forever
 
 asyncio.run(main())
