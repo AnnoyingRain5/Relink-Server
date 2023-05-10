@@ -3,6 +3,7 @@ import json
 import hashlib
 import re
 import websockets
+import websockets.server
 import communication
 
 
