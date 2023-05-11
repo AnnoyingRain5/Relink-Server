@@ -7,7 +7,7 @@ from websockets.server import WebSocketServerProtocol as WebsocketProtocol
 import communication
 
 
-CURSOR_UP = '\033[F'
+PORT = 8765
 DEFAULT_CHANNEL = "general"
 
 
@@ -181,7 +181,7 @@ async def signupHandler(websocket: WebsocketProtocol, packet: communication.Sign
 
 
 async def main():
-    async with websockets.serve(server, "0.0.0.0", 8765):  # type: ignore
+    async with websockets.serve(server, "0.0.0.0", PORT):  # type: ignore
         await asyncio.Future()  # run forever
 
 asyncio.run(main())
