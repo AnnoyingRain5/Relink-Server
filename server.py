@@ -2,28 +2,89 @@ import asyncio
 import json
 import hashlib
 import re
+import os
+from typing import Any
 import websockets
 from websockets.server import WebSocketServerProtocol as WebsocketProtocol
 import communication
+import requests
+
+IP_ADDRESS = requests.get("https://api.ipify.org").content.decode("utf-8")
+try:  # use dotenv for values if possible
+    import dotenv
+    dotenv.load_dotenv()
+except:  # it's okay if dotenv is not present
+    pass
 
 
-PORT = 8765
-DEFAULT_CHANNEL = "general"
+class preferences():
+    def __init__(self):
+        self.PORT: str
+        self.DEFAULT_CHANNEL: str
+        self.SERVER_ADDRESS: str
+        self.WELCOME_MESSAGE: str
+
+    def __getattribute__(self, __name: str) -> str:
+        defaults = {
+            "PORT": "8765",
+            "DEFAULT_CHANNEL": "general",
+            "SERVER_ADDRESS": IP_ADDRESS,
+            "Welcome_Message": "Welcome to the test server!"
+        }
+        envvar = os.getenv(__name)
+        if envvar is not None:
+            return envvar
+        else:
+            try:
+                return defaults[__name]
+            except:
+                raise KeyError
+
+    def __setattr__(self, __name: str, __value: Any) -> None:
+        raise NotImplementedError
+
+
+prefs = preferences()
 
 
 class User():
-    def __init__(self, username):
+    def __init__(self, username: str):
         self.username = username
-        self.channel = DEFAULT_CHANNEL
+        self.channel: str = prefs.DEFAULT_CHANNEL
+        self.federatedWebsocket = None
 
 
 users: dict[WebsocketProtocol, User] = {}
 messages = []
 
 
-async def server(websocket):
-    async for packet in websocket:
-        packet = communication.packet(packet)
+async def SendServerWelcome(websocket: WebsocketProtocol):
+    message = communication.System()
+    message.text = prefs.WELCOME_MESSAGE
+    await websocket.send(message.json)
+
+
+async def server(websocket: WebsocketProtocol):
+    async for rawpacket in websocket:
+        packet = communication.packet(rawpacket)
+        # if they are logged in
+        if websocket in users:
+            # if they are in a federated server
+            if users[websocket].federatedWebsocket is not None:
+                # if it is not a command
+                if type(packet) != communication.Command:
+                    await users[websocket].federatedWebsocket.send(  # type: ignore
+                        rawpacket)
+                    continue
+                else:  # it must be a command
+                    cmdname = communication.packet(
+                        rawpacket).name.lower()  # type: ignore
+                    if cmdname == "switch":
+                        await commandHandler(websocket, packet)
+                    else:
+                        await users[websocket].federatedWebsocket.send(  # type: ignore
+                            rawpacket)
+                        continue
         match type(packet):
             case communication.Message:
                 await messageHandler(websocket, packet)  # type: ignore
@@ -33,8 +94,34 @@ async def server(websocket):
                 await loginHandler(websocket, packet)  # type: ignore
             case communication.SignupRequest:
                 await signupHandler(websocket, packet)  # type: ignore
+            case communication.FederationRequest:
+                await FederationHandler(websocket, packet)  # type: ignore
             case _:
                 print(f"oops! we got a {type(packet)}.")
+
+
+async def FederatedServerManager(server, packet, userwebsocket: WebsocketProtocol):
+    async with websockets.connect(server) as FederatedServer:  # type: ignore
+        print("connected")
+        print(packet.args[0].split("@"))
+
+        # switch the channel
+        users[userwebsocket].channel = packet.args[0]
+        # tell the client that the channel has changed
+        message = communication.ChannelChange()
+        message.channel = packet.args[0]
+        await userwebsocket.send(message.json)
+        request = communication.FederationRequest()
+        request.channel = packet.args[0].split("@")[0]
+        request.username = f"{users[userwebsocket].username}:{prefs.SERVER_ADDRESS}"
+        await FederatedServer.send(request.json)
+        users[userwebsocket].federatedWebsocket = FederatedServer
+        # recieve messages from federated server loop
+        while True:
+            rawFederatedPacket = await FederatedServer.recv()
+            print("got a federated packet!")
+            print(rawFederatedPacket)
+            await userwebsocket.send(rawFederatedPacket)
 
 
 async def logoffHandler(websocket):
@@ -53,6 +140,7 @@ async def logoffHandler(websocket):
 
 async def messageHandler(websocket: WebsocketProtocol, message: communication.Message):
     messages.append(message)
+    print(users[websocket].channel)
     print(message.json)
     # reconstruct packet in case of tampering
     message.username = users[websocket].username
@@ -103,7 +191,27 @@ async def helpcommand(websocket: WebsocketProtocol, packet: communication.Comman
     await websocket.send(message.json)
 
 
+async def FederationHandler(websocket: WebsocketProtocol, packet: communication.FederationRequest):
+    user = User(packet.username)
+    user.channel = packet.channel
+    users[websocket] = user
+    asyncio.create_task(logoffHandler(websocket))
+    await SendServerWelcome(websocket)
+
+
 async def switchcommand(websocket: WebsocketProtocol, packet: communication.Command):
+    # if the channel is federated
+    if "@" in packet.args[0]:
+        print("switching to federated")
+        server = packet.args[0].split("@")[1]
+        if ":" in server:
+            server = f"ws://{server}"
+        else:
+            server = f"ws://{server}:8765"
+        print(f"ready to connect to {server}")
+        asyncio.create_task(FederatedServerManager(server, packet, websocket))
+    else:
+        users[websocket].federatedWebsocket = None
     # switch the channel
     users[websocket].channel = packet.args[0]
     # tell the client that the channel has changed
@@ -157,8 +265,9 @@ async def loginHandler(websocket: WebsocketProtocol, packet: communication.Login
     await websocket.send(result.json)
     if result.result:
         message = communication.ChannelChange()
-        message.channel = DEFAULT_CHANNEL
+        message.channel = prefs.DEFAULT_CHANNEL
         await websocket.send(message.json)
+        await SendServerWelcome(websocket)
 
 
 async def signupHandler(websocket: WebsocketProtocol, packet: communication.SignupRequest):
@@ -172,8 +281,9 @@ async def signupHandler(websocket: WebsocketProtocol, packet: communication.Sign
             json.dump(database, f)
         users[websocket] = User(packet.username)
         message = communication.ChannelChange()
-        message.channel = DEFAULT_CHANNEL
+        message.channel = prefs.DEFAULT_CHANNEL
         await websocket.send(message.json)
+        await SendServerWelcome(websocket)
     else:
         result.result = False
         result.reason = "Username is already in use"
@@ -181,7 +291,7 @@ async def signupHandler(websocket: WebsocketProtocol, packet: communication.Sign
 
 
 async def main():
-    async with websockets.serve(server, "0.0.0.0", PORT):  # type: ignore
+    async with websockets.serve(server, "0.0.0.0", prefs.PORT):  # type: ignore
         await asyncio.Future()  # run forever
 
 asyncio.run(main())
