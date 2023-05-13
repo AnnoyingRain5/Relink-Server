@@ -201,9 +201,9 @@ async def FederationHandler(websocket: WebsocketProtocol, packet: communication.
 
 async def switchcommand(websocket: WebsocketProtocol, packet: communication.Command):
     # if the channel is federated
-    if "@" in packet.args[0]:
+    if "@" in packet.args[0] and not (packet.args[0].startswith("@") and len(packet.args[0].split("@")) == 2):
         print("switching to federated")
-        server = packet.args[0].split("@")[1]
+        server = packet.args[0].split("@")[-1]
         if ":" in server:
             server = f"ws://{server}"
         else:
