@@ -113,7 +113,7 @@ async def FederatedServerManager(server, packet, userwebsocket: WebsocketProtoco
         await userwebsocket.send(message.json)
         request = communication.FederationRequest()
         request.channel = packet.args[0].split("@")[0]
-        request.username = f"{users[userwebsocket].username}:{prefs.SERVER_ADDRESS}"
+        request.username = f"{users[userwebsocket].username}@{prefs.SERVER_ADDRESS}"
         await FederatedServer.send(request.json)
         users[userwebsocket].federatedWebsocket = FederatedServer
         # recieve messages from federated server loop
