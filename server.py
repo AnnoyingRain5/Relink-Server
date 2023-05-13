@@ -29,7 +29,7 @@ class preferences():
             "PORT": "8765",
             "DEFAULT_CHANNEL": "general",
             "SERVER_ADDRESS": IP_ADDRESS,
-            "Welcome_Message": "Welcome to the test server!"
+            "WELCOME_MESSAGE": "Welcome to the test server!"
         }
         envvar = os.getenv(__name)
         if envvar is not None:
