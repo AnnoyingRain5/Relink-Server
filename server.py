@@ -9,12 +9,17 @@ from websockets.server import WebSocketServerProtocol as WebsocketProtocol
 import communication
 import requests
 
-IP_ADDRESS = requests.get("https://api.ipify.org").content.decode("utf-8")
 try:  # use dotenv for values if possible
     import dotenv
     dotenv.load_dotenv()
 except:  # it's okay if dotenv is not present
     pass
+
+if os.getenv("SERVER_ADDRESS") == None:
+    IP_ADDRESS = requests.get("https://api.ipify.org").content.decode("utf-8")
+else:
+    # the IP address is never used if the env var exists
+    IP_ADDRESS = ""
 
 
 class preferences():
