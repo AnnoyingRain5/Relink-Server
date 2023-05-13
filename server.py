@@ -52,6 +52,7 @@ class User():
         self.username = username
         self.channel: str = prefs.DEFAULT_CHANNEL
         self.federatedWebsocket = None
+        self.federatedServerManagerTask: asyncio.Task | None = None
 
 
 users: dict[WebsocketProtocol, User] = {}
@@ -201,6 +202,9 @@ async def FederationHandler(websocket: WebsocketProtocol, packet: communication.
 
 async def switchcommand(websocket: WebsocketProtocol, packet: communication.Command):
     # if the channel is federated
+    if users[websocket].federatedServerManagerTask is not None:
+        users[websocket].federatedServerManagerTask.cancel()  # type: ignore
+
     if "@" in packet.args[0] and not (packet.args[0].startswith("@") and len(packet.args[0].split("@")) == 2):
         print("switching to federated")
         server = packet.args[0].split("@")[-1]
@@ -209,7 +213,8 @@ async def switchcommand(websocket: WebsocketProtocol, packet: communication.Comm
         else:
             server = f"ws://{server}:8765"
         print(f"ready to connect to {server}")
-        asyncio.create_task(FederatedServerManager(server, packet, websocket))
+        users[websocket].federatedServerManagerTask = asyncio.create_task(
+            FederatedServerManager(server, packet, websocket))
     else:
         users[websocket].federatedWebsocket = None
     # switch the channel
