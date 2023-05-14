@@ -8,3 +8,8 @@ You will also need to provide an empty users.json file, which will be used to st
 
 ## Submodule note:
 This repository has git submodules, to clone them, use the `--recurse-submodules` flag, or run `git submodule update --init --recursive` after cloning.
+
+## Setup:
+You will need python 3.10 or newer to run this server.
+
+You can then install the required dependencies by running `pip install -r requirements.txt`.
