@@ -2,7 +2,7 @@ FROM python:3.11
 
 WORKDIR /usr/src/
 
-RUN git clone https://github.com/AnnoyingRain5/RelinkServer app
+RUN git clone https://github.com/AnnoyingRain5/Relink-Server app
 
 WORKDIR /usr/src/app
 
