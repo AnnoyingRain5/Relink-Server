@@ -23,6 +23,9 @@ else:
     # the IP address is never used if the env var exists
     IP_ADDRESS = ""
 
+INVALID_CHARS = ("!", "#", "$", "%", "^", "&", "'", '"', "*", "(", ")",
+                 "<", ">", "/", "\\", "[", "]", "|", ":", " ", ",", ".", "~", "`", "+")
+
 
 class preferences():
     def __init__(self):
@@ -212,6 +215,14 @@ async def switchcommand(websocket: WebSocketServerProtocol, packet: communicatio
     if users[websocket].federatedServerManagerTask is not None:
         users[websocket].federatedServerManagerTask.cancel()  # type: ignore
 
+    if any(char in packet.args[0] for char in INVALID_CHARS):
+        message = communication.System()
+        message.text = "The following characters are not allowed in channel names:\n"
+        message.text += " ".join(INVALID_CHARS) + "\n"
+        message.text += "The channel you tried to switch to includes one of these characters."
+        await websocket.send(message.json)
+        return
+
     if "@" in packet.args[0] and not (packet.args[0].startswith("@") and len(packet.args[0].split("@")) == 2):
         print("switching to federated")
         server = packet.args[0].split("@")[-1]
@@ -285,7 +296,11 @@ async def loginHandler(websocket: WebSocketServerProtocol, packet: communication
 async def signupHandler(websocket: WebSocketServerProtocol, packet: communication.SignupRequest):
     result = communication.Result()
     database = json.load(open("users.json", "r", encoding="utf-8"))
-    if packet.username not in database:
+    if any(char in packet.username for char in INVALID_CHARS) or "@" in packet.username:
+        result.result = False
+        result.reason = "Your username contains invalid characters. The following characters are considered invalid in a username:\n"
+        result.reason += " ".join(INVALID_CHARS) + " @\n"
+    elif packet.username not in database:
         result.result = True
         passwordhash = hashlib.sha256(packet.password.encode()).hexdigest()
         database[packet.username] = passwordhash
