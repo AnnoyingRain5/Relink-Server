@@ -264,7 +264,7 @@ async def listcommand(websocket: WebSocketServerProtocol, packet: communication.
 
 async def loginHandler(websocket: WebSocketServerProtocol, packet: communication.LoginRequest):
     result = communication.Result()
-    database = json.load(open("users.json", "r", encoding="utf-8"))
+    database = json.load(open("./db/users.json", "r", encoding="utf-8"))
     if packet.username in database:
         if database[packet.username] == hashlib.sha256(packet.password.encode()).hexdigest():
             # correct username and password
@@ -295,7 +295,7 @@ async def loginHandler(websocket: WebSocketServerProtocol, packet: communication
 
 async def signupHandler(websocket: WebSocketServerProtocol, packet: communication.SignupRequest):
     result = communication.Result()
-    database = json.load(open("users.json", "r", encoding="utf-8"))
+    database = json.load(open("./db/users.json", "r", encoding="utf-8"))
     if any(char in packet.username for char in INVALID_CHARS) or "@" in packet.username:
         result.result = False
         result.reason = "Your username contains invalid characters. The following characters are considered invalid in a username:\n"
@@ -304,7 +304,7 @@ async def signupHandler(websocket: WebSocketServerProtocol, packet: communicatio
         result.result = True
         passwordhash = hashlib.sha256(packet.password.encode()).hexdigest()
         database[packet.username] = passwordhash
-        with open("users.json", "w", encoding="utf-8") as f:
+        with open("./db/users.json", "w", encoding="utf-8") as f:
             json.dump(database, f)
         users[websocket] = User(packet.username)
         message = communication.ChannelChange()
