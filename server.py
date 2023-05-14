@@ -8,7 +8,7 @@ import websockets.server
 import websockets.client
 from websockets.server import WebSocketServerProtocol
 from websockets.client import WebSocketClientProtocol
-import communication
+import Relink_Communication.communication as communication
 import requests
 
 try:  # use dotenv for values if possible
