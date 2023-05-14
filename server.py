@@ -4,8 +4,10 @@ import hashlib
 import re
 import os
 from typing import Any
-import websockets
-from websockets.server import WebSocketServerProtocol as WebsocketProtocol
+import websockets.server
+import websockets.client
+from websockets.server import WebSocketServerProtocol
+from websockets.client import WebSocketClientProtocol
 import communication
 import requests
 
@@ -24,19 +26,19 @@ else:
 
 class preferences():
     def __init__(self):
-        self.PORT: str
+        self.PORT: int
         self.DEFAULT_CHANNEL: str
         self.SERVER_ADDRESS: str
         self.WELCOME_MESSAGE: str
 
     def __getattribute__(self, __name: str) -> str:
         defaults = {
-            "PORT": "8765",
+            "PORT": 8765,
             "DEFAULT_CHANNEL": "general",
             "SERVER_ADDRESS": IP_ADDRESS,
             "WELCOME_MESSAGE": "Welcome to the test server!"
         }
-        envvar = os.getenv(__name)
+        envvar = os.getenv(f"RLS_{__name}")
         if envvar is not None:
             return envvar
         else:
@@ -56,21 +58,21 @@ class User():
     def __init__(self, username: str):
         self.username = username
         self.channel: str = prefs.DEFAULT_CHANNEL
-        self.federatedWebsocket = None
+        self.federatedWebsocket: WebSocketClientProtocol | None = None
         self.federatedServerManagerTask: asyncio.Task | None = None
 
 
-users: dict[WebsocketProtocol, User] = {}
+users: dict[WebSocketServerProtocol, User] = {}
 messages = []
 
 
-async def SendServerWelcome(websocket: WebsocketProtocol):
+async def SendServerWelcome(websocket: WebSocketServerProtocol):
     message = communication.System()
     message.text = prefs.WELCOME_MESSAGE
     await websocket.send(message.json)
 
 
-async def server(websocket: WebsocketProtocol):
+async def server(websocket: WebSocketServerProtocol):
     async for rawpacket in websocket:
         packet = communication.packet(rawpacket)
         # if they are logged in
@@ -106,8 +108,8 @@ async def server(websocket: WebsocketProtocol):
                 print(f"oops! we got a {type(packet)}.")
 
 
-async def FederatedServerManager(server, packet, userwebsocket: WebsocketProtocol):
-    async with websockets.connect(server) as FederatedServer:  # type: ignore
+async def FederatedServerManager(server, packet, userwebsocket: WebSocketServerProtocol):
+    async with websockets.client.connect(server) as FederatedServer:
         print("connected")
         print(packet.args[0].split("@"))
 
@@ -144,7 +146,7 @@ async def logoffHandler(websocket):
             await userWebsocket.send(message.json)
 
 
-async def messageHandler(websocket: WebsocketProtocol, message: communication.Message):
+async def messageHandler(websocket: WebSocketServerProtocol, message: communication.Message):
     messages.append(message)
     print(users[websocket].channel)
     print(message.json)
@@ -174,7 +176,7 @@ async def messageHandler(websocket: WebsocketProtocol, message: communication.Me
                 await userWebsocket.send(notificiation.json)
 
 
-async def commandHandler(websocket: WebsocketProtocol, packet: communication.Command):
+async def commandHandler(websocket: WebSocketServerProtocol, packet: communication.Command):
     match packet.name:
         case "switch":
             await switchcommand(websocket, packet)
@@ -188,7 +190,7 @@ async def commandHandler(websocket: WebsocketProtocol, packet: communication.Com
             await websocket.send(message.json)
 
 
-async def helpcommand(websocket: WebsocketProtocol, packet: communication.Command):
+async def helpcommand(websocket: WebSocketServerProtocol, packet: communication.Command):
     message = communication.System()
     message.text = "Registered commands are as follows:\n"
     message.text += "/switch <channel>\n"
@@ -197,7 +199,7 @@ async def helpcommand(websocket: WebsocketProtocol, packet: communication.Comman
     await websocket.send(message.json)
 
 
-async def FederationHandler(websocket: WebsocketProtocol, packet: communication.FederationRequest):
+async def FederationHandler(websocket: WebSocketServerProtocol, packet: communication.FederationRequest):
     user = User(packet.username)
     user.channel = packet.channel
     users[websocket] = user
@@ -205,7 +207,7 @@ async def FederationHandler(websocket: WebsocketProtocol, packet: communication.
     await SendServerWelcome(websocket)
 
 
-async def switchcommand(websocket: WebsocketProtocol, packet: communication.Command):
+async def switchcommand(websocket: WebSocketServerProtocol, packet: communication.Command):
     # if the channel is federated
     if users[websocket].federatedServerManagerTask is not None:
         users[websocket].federatedServerManagerTask.cancel()  # type: ignore
@@ -230,7 +232,7 @@ async def switchcommand(websocket: WebsocketProtocol, packet: communication.Comm
     await websocket.send(message.json)
 
 
-async def listcommand(websocket: WebsocketProtocol, packet: communication.Command):
+async def listcommand(websocket: WebSocketServerProtocol, packet: communication.Command):
     userlist = "Logged in users are: "
     channeluserlist = "Users currently in your channel are: "
     # get all of the users
@@ -249,7 +251,7 @@ async def listcommand(websocket: WebsocketProtocol, packet: communication.Comman
     await websocket.send(message.json)
 
 
-async def loginHandler(websocket: WebsocketProtocol, packet: communication.LoginRequest):
+async def loginHandler(websocket: WebSocketServerProtocol, packet: communication.LoginRequest):
     result = communication.Result()
     database = json.load(open("users.json", "r", encoding="utf-8"))
     if packet.username in database:
@@ -280,7 +282,7 @@ async def loginHandler(websocket: WebsocketProtocol, packet: communication.Login
         await SendServerWelcome(websocket)
 
 
-async def signupHandler(websocket: WebsocketProtocol, packet: communication.SignupRequest):
+async def signupHandler(websocket: WebSocketServerProtocol, packet: communication.SignupRequest):
     result = communication.Result()
     database = json.load(open("users.json", "r", encoding="utf-8"))
     if packet.username not in database:
@@ -301,7 +303,7 @@ async def signupHandler(websocket: WebsocketProtocol, packet: communication.Sign
 
 
 async def main():
-    async with websockets.serve(server, "0.0.0.0", prefs.PORT):  # type: ignore
+    async with websockets.server.serve(server, "0.0.0.0", prefs.PORT):
         await asyncio.Future()  # run forever
 
 asyncio.run(main())
