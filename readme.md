@@ -6,6 +6,10 @@ The server can be configured by providing the environment variables documented i
 
 You will also need to provide an empty users.json file, which will be used to store user data. This file should be located in a folder called db, in the same directory as the server.py file.
 
+## Proxy Support:
+Due to [WS#364](https://github.com/python-websockets/websockets/issues/364) and [WS#475](https://github.com/python-websockets/websockets/issues/475),
+federation to other servers will be unavailable if your server is running under a proxy.
+
 ## Submodule note:
 This repository has git submodules, to clone them, use the `--recurse-submodules` flag, or run `git submodule update --init --recursive` after cloning.
 
