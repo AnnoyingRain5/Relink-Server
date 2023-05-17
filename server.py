@@ -24,7 +24,8 @@ else:
     IP_ADDRESS = ""
 
 INVALID_CHARS = ("!", "#", "$", "%", "^", "&", "'", '"', "*", "(", ")",
-                 "<", ">", "/", "\\", "[", "]", "|", ":", " ", ",", ".", "~", "`", "+")
+                 "<", ">", "/", "\\", "[", "]", "|", " ", ",", "~", "`", "+")
+INVALID_USERNAME_CHARS_EXT = (".", ":", "@")
 
 
 class preferences():
@@ -301,10 +302,11 @@ async def loginHandler(websocket: WebSocketServerProtocol, packet: communication
 async def signupHandler(websocket: WebSocketServerProtocol, packet: communication.SignupRequest):
     result = communication.Result()
     database = json.load(open("./db/users.json", "r", encoding="utf-8"))
-    if any(char in packet.username for char in INVALID_CHARS) or "@" in packet.username:
+    if any(char in packet.username for char in INVALID_CHARS + INVALID_USERNAME_CHARS_EXT) or "@" in packet.username:
         result.result = False
         result.reason = "Your username contains invalid characters. The following characters are considered invalid in a username:\n"
-        result.reason += " ".join(INVALID_CHARS) + " @\n"
+        result.reason += " ".join(INVALID_CHARS) + " " + \
+            " ".join(INVALID_USERNAME_CHARS_EXT)
         await websocket.send(result.json)
     elif packet.username not in database:
         result.result = True
