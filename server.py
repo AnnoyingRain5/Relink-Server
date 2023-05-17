@@ -172,10 +172,15 @@ async def messageHandler(websocket: WebSocketServerProtocol, message: communicat
             # if we are in the same channel
             if user.channel == users[websocket].channel:
                 await userWebsocket.send(message.json)
+            # send a notification if it mentions them
             if f"@{user.username}" in mentions:
                 notificiation = communication.Notification()
-                notificiation.location = users[websocket].channel
                 notificiation.type = "mention"
+                # if they are a federated user, append the server address
+                if "@" in user.username:
+                    notificiation.location = f"{users[websocket].channel}@{prefs.SERVER_ADDRESS}"
+                else:
+                    notificiation.location = users[websocket].channel
                 await userWebsocket.send(notificiation.json)
 
 
