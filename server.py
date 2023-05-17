@@ -300,6 +300,7 @@ async def signupHandler(websocket: WebSocketServerProtocol, packet: communicatio
         result.result = False
         result.reason = "Your username contains invalid characters. The following characters are considered invalid in a username:\n"
         result.reason += " ".join(INVALID_CHARS) + " @\n"
+        await websocket.send(result.json)
     elif packet.username not in database:
         result.result = True
         passwordhash = hashlib.sha256(packet.password.encode()).hexdigest()
@@ -309,12 +310,13 @@ async def signupHandler(websocket: WebSocketServerProtocol, packet: communicatio
         users[websocket] = User(packet.username)
         message = communication.ChannelChange()
         message.channel = prefs.DEFAULT_CHANNEL
+        await websocket.send(result.json)
         await websocket.send(message.json)
         await SendServerWelcome(websocket)
     else:
         result.result = False
         result.reason = "Username is already in use"
-    await websocket.send(result.json)
+        await websocket.send(result.json)
 
 
 async def main():
