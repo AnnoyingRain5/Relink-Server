@@ -8,6 +8,14 @@ The server can be configured by providing the environment variables documented i
 
 You will also need to provide an empty users.json file, which will be used to store user data. This file should be located in a folder called db, in the same directory as the server.py file.
 
+### SRV DNS Records:
+All clients (should) look for a SRV DNS record before connecting.
+
+The record should be formatted as the following: `_relink._websocket.example.com.` with a response formatted as: `WEIGHT PORT example.com` of course with example.com replaced with your domain name.
+
+For example, the `relink.network` homeserver has the record set up like this:
+
+HOST: `	_relink._websocket.relink.network` ANSWER: `0 8765 server.relink.network`
 ## Proxy Support:
 Due to [WS#364](https://github.com/python-websockets/websockets/issues/364) and [WS#475](https://github.com/python-websockets/websockets/issues/475),
 federation to other servers will be unavailable if your server is running under a proxy.
