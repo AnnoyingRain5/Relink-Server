@@ -136,7 +136,7 @@ async def FederatedServerManager(server, packet, userwebsocket: WebSocketServerP
             await userwebsocket.send(rawFederatedPacket)
 
 
-async def logoffHandler(websocket):
+async def logoffHandler(websocket: WebSocketServerProtocol):
     await websocket.wait_closed()
     # if we reach this point, the connection has closed
     # we can now remove them from the users list
