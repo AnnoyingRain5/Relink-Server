@@ -17,18 +17,20 @@ try:  # use dotenv for values if possible
 except:  # it's okay if dotenv is not present
     pass
 
+# init constants
 if os.getenv("SERVER_ADDRESS") == None:
     IP_ADDRESS = requests.get("https://api.ipify.org").content.decode("utf-8")
 else:
     # the IP address is never used if the env var exists
     IP_ADDRESS = ""
 
-INVALID_CHARS = ("!", "#", "$", "%", "^", "&", "'", '"', "*", "(", ")",
-                 "<", ">", "/", "\\", "[", "]", "|", " ", ",", "~", "`", "+")
-INVALID_USERNAME_CHARS_EXT = (".", ":", "@")
-
 
 class preferences():
+    '''Main preferences class
+
+    This class handles getting environment varables from the system, or falling back to default values
+    if they are not present'''
+
     def __init__(self):
         self.PORT: int
         self.DEFAULT_CHANNEL: str
@@ -55,28 +57,35 @@ class preferences():
         raise NotImplementedError
 
 
-prefs = preferences()
-
-
 class User():
+    '''Main user class
+
+    This class is used to store information about the current state of a user;
+    what channel they are in, if they are in a federated server, their username, etc'''
+
     def __init__(self, username: str):
         self.username = username
         self.channel: str = prefs.DEFAULT_CHANNEL
         self.federatedWebsocket: WebSocketClientProtocol | None = None
         self.federatedServerManagerTask: asyncio.Task | None = None
 
+# init constants
 
+ # characters that should be considered invalid for channel names and usernames
+INVALID_CHARS = ("!", "#", "$", "%", "^", "&", "'", '"', "*", "(", ")",
+                 "<", ">", "/", "\\", "[", "]", "|", " ", ",", "~", "`", "+")
+# Extension of the tuple above; these characters are also invalid in usernames
+INVALID_USERNAME_CHARS_EXT = (".", ":", "@")
+
+# init variables
+
+prefs = preferences()
 users: dict[WebSocketServerProtocol, User] = {}
 messages = []
 
 
-async def SendServerWelcome(websocket: WebSocketServerProtocol):
-    message = communication.System()
-    message.text = prefs.WELCOME_MESSAGE
-    await websocket.send(message.json)
-
-
 async def server(websocket: WebSocketServerProtocol):
+    '''Main function, handles recieving packets and calling the appropriate function depending on packet type'''
     async for rawpacket in websocket:
         packet = communication.packet(rawpacket)
         # if they are logged in
@@ -97,6 +106,7 @@ async def server(websocket: WebSocketServerProtocol):
                         await users[websocket].federatedWebsocket.send(  # type: ignore
                             rawpacket)
                         continue
+        # work out what type of packet it is and run the corresponding function
         match type(packet):
             case communication.Message:
                 await messageHandler(websocket, packet)  # type: ignore
@@ -108,15 +118,17 @@ async def server(websocket: WebSocketServerProtocol):
                 await signupHandler(websocket, packet)  # type: ignore
             case communication.FederationRequest:
                 await FederationHandler(websocket, packet)  # type: ignore
+            case None:
+                print(
+                    f"Unknown packet type. JSON data is as follows: {rawpacket}")
             case _:
-                print(f"oops! we got a {type(packet)}.")
+                print(
+                    f"Unknown packet type: {type(packet)}. JSON data is as follows: {rawpacket}")
 
 
 async def FederatedServerManager(server, packet, userwebsocket: WebSocketServerProtocol):
+    '''Function to connect to and get packets from federated servers, then pass them to the client'''
     async with websockets.client.connect(server) as FederatedServer:
-        print("connected")
-        print(packet.args[0].split("@"))
-
         # switch the channel
         users[userwebsocket].channel = packet.args[0]
         # tell the client that the channel has changed
@@ -131,16 +143,15 @@ async def FederatedServerManager(server, packet, userwebsocket: WebSocketServerP
         # recieve messages from federated server loop
         while True:
             rawFederatedPacket = await FederatedServer.recv()
-            print("got a federated packet!")
-            print(rawFederatedPacket)
             await userwebsocket.send(rawFederatedPacket)
 
 
 async def logoffHandler(websocket: WebSocketServerProtocol):
+    '''Handles logoff events'''
     await websocket.wait_closed()
     # if we reach this point, the connection has closed
     # we can now remove them from the users list
-    # announce to all users in the channel
+    # and announce to all users in the same channel
     logoffuser = users[websocket]
     del users[websocket]
     for userWebsocket, user in users.items():
@@ -150,12 +161,21 @@ async def logoffHandler(websocket: WebSocketServerProtocol):
             await userWebsocket.send(message.json)
 
 
+async def SendServerWelcome(websocket: WebSocketServerProtocol):
+    '''Function handling sending the welcome message to users'''
+    message = communication.System()
+    message.text = prefs.WELCOME_MESSAGE
+    await websocket.send(message.json)
+
+
 async def messageHandler(websocket: WebSocketServerProtocol, message: communication.Message):
+    '''Handles Message packets'''
     messages.append(message)
     print(users[websocket].channel)
     print(message.json)
-    # reconstruct packet in case of tampering
+    # partially reconstruct packet in case of tampering
     message.username = users[websocket].username
+    # if it is a direct message
     if message.isDM:
         for userWebsocket, user in users.items():
             # if they are the correct user
@@ -164,10 +184,12 @@ async def messageHandler(websocket: WebSocketServerProtocol, message: communicat
                 await websocket.send(message.json)
                 break
         else:
+            # We did not break out of the loop, the user must not be online
             sysmessage = communication.System()
             sysmessage.text = f"Failed to send DM: user {users[websocket].channel} is offline or does not exist."
             await websocket.send(sysmessage.json)
     else:
+        # it is not a direct message
         mentions = re.findall("@\\S\\S*", message.text)
         for userWebsocket, user in users.items():
             # if we are in the same channel
@@ -186,6 +208,7 @@ async def messageHandler(websocket: WebSocketServerProtocol, message: communicat
 
 
 async def commandHandler(websocket: WebSocketServerProtocol, packet: communication.Command):
+    '''Handles command packets, run the corresponding function based on what type of command it is'''
     match packet.name:
         case "switch":
             await switchcommand(websocket, packet)
@@ -194,12 +217,14 @@ async def commandHandler(websocket: WebSocketServerProtocol, packet: communicati
         case "help":
             await helpcommand(websocket, packet)
         case _:
+            # Command is not known to the server
             message = communication.System()
             message.text = "Unknown command."
             await websocket.send(message.json)
 
 
 async def helpcommand(websocket: WebSocketServerProtocol, packet: communication.Command):
+    '''Sends a list of commands to the client'''
     message = communication.System()
     message.text = "Registered commands are as follows:\n"
     message.text += "/switch <channel>\n"
@@ -209,34 +234,43 @@ async def helpcommand(websocket: WebSocketServerProtocol, packet: communication.
 
 
 async def FederationHandler(websocket: WebSocketServerProtocol, packet: communication.FederationRequest):
+    '''Handles other servers attempting to federate to this one'''
+    # create a user object
     user = User(packet.username)
     user.channel = packet.channel
+    # add them to the users list
     users[websocket] = user
+    # schedule the logoff handler
     asyncio.create_task(logoffHandler(websocket))
+    # send the welcome message
     await SendServerWelcome(websocket)
 
 
 async def switchcommand(websocket: WebSocketServerProtocol, packet: communication.Command):
+    '''Handles the /switch command by switching the channel the user is in
+    and federating to another server if it is requested'''
     # if the channel is federated
-    if users[websocket].federatedServerManagerTask is not None:
+    if users[websocket].federatedServerManagerTask is not None:  # if the user is federated
         users[websocket].federatedServerManagerTask.cancel()  # type: ignore
 
+    # if there are any invalid characters in the channel name
     if any(char in packet.args[0] for char in INVALID_CHARS):
         message = communication.System()
         message.text = "The following characters are not allowed in channel names:\n"
         message.text += " ".join(INVALID_CHARS) + "\n"
         message.text += "The channel you tried to switch to includes one of these characters."
         await websocket.send(message.json)
-        return
+        return  # exit the function here
 
+    # if the user is wanting to connect to a federated server
     if "@" in packet.args[0] and not (packet.args[0].startswith("@") and len(packet.args[0].split("@")) == 2):
-        print("switching to federated")
         server = packet.args[0].split("@")[-1]
-        if ":" in server:
+        if ":" in server:  # if a port is specified
             server = f"ws://{server}"
         else:
+            # no port specified, use the default port
             server = f"ws://{server}:8765"
-        print(f"ready to connect to {server}")
+        # schedule the federation manager and add it to the user object
         users[websocket].federatedServerManagerTask = asyncio.create_task(
             FederatedServerManager(server, packet, websocket))
     else:
@@ -250,6 +284,7 @@ async def switchcommand(websocket: WebSocketServerProtocol, packet: communicatio
 
 
 async def listcommand(websocket: WebSocketServerProtocol, packet: communication.Command):
+    '''Handles the /list command by sending a list of online users to the client'''
     userlist = "Logged in users are: "
     channeluserlist = "Users currently in your channel are: "
     # get all of the users
@@ -269,6 +304,7 @@ async def listcommand(websocket: WebSocketServerProtocol, packet: communication.
 
 
 async def loginHandler(websocket: WebSocketServerProtocol, packet: communication.LoginRequest):
+    '''Handles login packets by checking usernames and passwords'''
     result = communication.Result()
     database = json.load(open("./db/users.json", "r", encoding="utf-8"))
     if packet.username in database:
@@ -281,18 +317,23 @@ async def loginHandler(websocket: WebSocketServerProtocol, packet: communication
                     result.reason = "You are already logged in from another location."
                     break
             else:
+                # if we did not find the user in the list of online users, let them in
                 users[websocket] = User(packet.username)
                 asyncio.create_task(logoffHandler(websocket))
                 result.result = True
 
         else:
+            # if the password is incorrect
             result.result = False
             result.reason = "Incorrect password"
     else:
+        # if the user does not have an account on this server
         result.result = False
         result.reason = "Username not found"
     await websocket.send(result.json)
+
     if result.result:
+        # if it was successful, switch the channel and send the server welcome message
         message = communication.ChannelChange()
         message.channel = prefs.DEFAULT_CHANNEL
         await websocket.send(message.json)
@@ -300,20 +341,25 @@ async def loginHandler(websocket: WebSocketServerProtocol, packet: communication
 
 
 async def signupHandler(websocket: WebSocketServerProtocol, packet: communication.SignupRequest):
+    '''Handles requests to sign up to the server'''
     result = communication.Result()
     database = json.load(open("./db/users.json", "r", encoding="utf-8"))
+    # if the username contains invalid characters
     if any(char in packet.username for char in INVALID_CHARS + INVALID_USERNAME_CHARS_EXT) or "@" in packet.username:
         result.result = False
         result.reason = "Your username contains invalid characters. The following characters are considered invalid in a username:\n"
         result.reason += " ".join(INVALID_CHARS) + " " + \
             " ".join(INVALID_USERNAME_CHARS_EXT)
         await websocket.send(result.json)
-    elif packet.username not in database:
+    elif packet.username not in database:  # if the username is not already taken
         result.result = True
+        # hash the password
         passwordhash = hashlib.sha256(packet.password.encode()).hexdigest()
+        # add the hashed password to the database
         database[packet.username] = passwordhash
         with open("./db/users.json", "w", encoding="utf-8") as f:
             json.dump(database, f)
+        # log the user in, set their channel and send a welcome message
         users[websocket] = User(packet.username)
         message = communication.ChannelChange()
         message.channel = prefs.DEFAULT_CHANNEL
@@ -321,12 +367,14 @@ async def signupHandler(websocket: WebSocketServerProtocol, packet: communicatio
         await websocket.send(message.json)
         await SendServerWelcome(websocket)
     else:
+        # tell the user that the  username is in use
         result.result = False
         result.reason = "Username is already in use"
         await websocket.send(result.json)
 
 
 async def main():
+    '''Inital function, starts the server using the Websockets library'''
     async with websockets.server.serve(server, "0.0.0.0", prefs.PORT):
         await asyncio.Future()  # run forever
 
