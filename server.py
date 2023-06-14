@@ -140,7 +140,7 @@ async def FederatedServerManager(server, packet, userwebsocket: WebSocketServerP
         request.username = f"{users[userwebsocket].username}@{prefs.SERVER_ADDRESS}"
         await FederatedServer.send(request.json)
         users[userwebsocket].federatedWebsocket = FederatedServer
-        # recieve messages from federated server loop
+        # receive messages from federated server loop
         while True:
             rawFederatedPacket = await FederatedServer.recv()
             await userwebsocket.send(rawFederatedPacket)
@@ -197,14 +197,14 @@ async def messageHandler(websocket: WebSocketServerProtocol, message: communicat
                 await userWebsocket.send(message.json)
             # send a notification if it mentions them
             if f"@{user.username}" in mentions:
-                notificiation = communication.Notification()
-                notificiation.type = "mention"
+                notification = communication.Notification()
+                notification.type = "mention"
                 # if they are a federated user, append the server address
                 if "@" in user.username:
-                    notificiation.location = f"{users[websocket].channel}@{prefs.SERVER_ADDRESS}"
+                    notification.location = f"{users[websocket].channel}@{prefs.SERVER_ADDRESS}"
                 else:
-                    notificiation.location = users[websocket].channel
-                await userWebsocket.send(notificiation.json)
+                    notification.location = users[websocket].channel
+                await userWebsocket.send(notification.json)
 
 
 async def commandHandler(websocket: WebSocketServerProtocol, packet: communication.Command):
