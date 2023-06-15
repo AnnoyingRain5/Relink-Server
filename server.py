@@ -18,7 +18,7 @@ except:  # it's okay if dotenv is not present
     pass
 
 # init constants
-if os.getenv("SERVER_ADDRESS") == None:
+if os.getenv("RLS_SERVER_ADDRESS") == None:
     IP_ADDRESS = requests.get("https://api.ipify.org").content.decode("utf-8")
 else:
     # the IP address is never used if the env var exists
@@ -83,6 +83,16 @@ prefs = preferences()
 users: dict[WebSocketServerProtocol, User] = {}
 messages = []
 
+async def RegenerateUserLists():
+    for userWebsocket, user in users.items():
+        message = communication.UserList()
+        for user in users.values():
+            message.serverList.append(user.username)
+        for _, otherUser in users.items():
+            if otherUser.channel == users[userWebsocket].channel:
+                message.channelList.append(otherUser.username)
+        print(message.json)
+        await userWebsocket.send(message.json)
 
 async def server(websocket: WebSocketServerProtocol):
     '''Main function, handles recieving packets and calling the appropriate function depending on packet type'''
@@ -155,6 +165,7 @@ async def logoffHandler(websocket: WebSocketServerProtocol):
     logoffuser = users[websocket]
     del users[websocket]
     for userWebsocket, user in users.items():
+        await RegenerateUserLists()
         if user.channel == logoffuser.channel:  # same channel
             message = communication.System()
             message.text = f"{logoffuser.username} just logged off"
@@ -281,6 +292,7 @@ async def switchcommand(websocket: WebSocketServerProtocol, packet: communicatio
     message = communication.ChannelChange()
     message.channel = packet.args[0]
     await websocket.send(message.json)
+    await RegenerateUserLists()
 
 
 async def listcommand(websocket: WebSocketServerProtocol, packet: communication.Command):
@@ -338,6 +350,7 @@ async def loginHandler(websocket: WebSocketServerProtocol, packet: communication
         message.channel = prefs.DEFAULT_CHANNEL
         await websocket.send(message.json)
         await SendServerWelcome(websocket)
+        await RegenerateUserLists()
 
 
 async def signupHandler(websocket: WebSocketServerProtocol, packet: communication.SignupRequest):
@@ -372,10 +385,9 @@ async def signupHandler(websocket: WebSocketServerProtocol, packet: communicatio
         result.reason = "Username is already in use"
         await websocket.send(result.json)
 
-
 async def main():
     '''Inital function, starts the server using the Websockets library'''
+    print("ready")
     async with websockets.server.serve(server, "0.0.0.0", prefs.PORT):
         await asyncio.Future()  # run forever
-
 asyncio.run(main())
