@@ -24,6 +24,7 @@ else:
     # the IP address is never used if the env var exists
     IP_ADDRESS = ""
 
+COMMANDS = ['switch']
 
 class preferences():
     '''Main preferences class
@@ -223,10 +224,6 @@ async def commandHandler(websocket: WebSocketServerProtocol, packet: communicati
     match packet.name:
         case "switch":
             await switchcommand(websocket, packet)
-        case "list":
-            await listcommand(websocket, packet)
-        case "help":
-            await helpcommand(websocket, packet)
         case _:
             # Command is not known to the server
             message = communication.System()
@@ -234,14 +231,6 @@ async def commandHandler(websocket: WebSocketServerProtocol, packet: communicati
             await websocket.send(message.json)
 
 
-async def helpcommand(websocket: WebSocketServerProtocol, packet: communication.Command):
-    '''Sends a list of commands to the client'''
-    message = communication.System()
-    message.text = "Registered commands are as follows:\n"
-    message.text += "/switch <channel>\n"
-    message.text += "/list\n"
-    message.text += "/help"
-    await websocket.send(message.json)
 
 
 async def FederationHandler(websocket: WebSocketServerProtocol, packet: communication.FederationRequest):
@@ -295,24 +284,6 @@ async def switchcommand(websocket: WebSocketServerProtocol, packet: communicatio
     await RegenerateUserLists()
 
 
-async def listcommand(websocket: WebSocketServerProtocol, packet: communication.Command):
-    '''Handles the /list command by sending a list of online users to the client'''
-    userlist = "Logged in users are: "
-    channeluserlist = "Users currently in your channel are: "
-    # get all of the users
-    for _, otherUser in users.items():
-        # add them to the message
-        userlist += f"{otherUser.username}, "
-        # if they are in the same channel
-        if otherUser.channel == users[websocket].channel:
-            channeluserlist += f"{otherUser.username}, "
-    # remove the last commas
-    userlist = userlist.removesuffix(", ")
-    channeluserlist = channeluserlist.removesuffix(", ")
-    # prepare and send the message
-    message = communication.System()
-    message.text = f"{userlist}\n{channeluserlist}"
-    await websocket.send(message.json)
 
 
 async def loginHandler(websocket: WebSocketServerProtocol, packet: communication.LoginRequest):
@@ -351,6 +322,9 @@ async def loginHandler(websocket: WebSocketServerProtocol, packet: communication
         await websocket.send(message.json)
         await SendServerWelcome(websocket)
         await RegenerateUserLists()
+        message = communication.CommandList()
+        message.commandList = COMMANDS
+        await websocket.send(message.json)
 
 
 async def signupHandler(websocket: WebSocketServerProtocol, packet: communication.SignupRequest):
@@ -379,6 +353,11 @@ async def signupHandler(websocket: WebSocketServerProtocol, packet: communicatio
         await websocket.send(result.json)
         await websocket.send(message.json)
         await SendServerWelcome(websocket)
+        await RegenerateUserLists()
+        cmdlist = communication.CommandList()
+        cmdlist.commandList = COMMANDS
+        await websocket.send(cmdlist.json)
+
     else:
         # tell the user that the  username is in use
         result.result = False
