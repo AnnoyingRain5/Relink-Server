@@ -255,7 +255,14 @@ async def switchcommand(websocket: WebSocketServerProtocol, packet: communicatio
     # if the channel is federated
     if users[websocket].federatedServerManagerTask is not None:  # if the user is federated
         users[websocket].federatedServerManagerTask.cancel()  # type: ignore
-
+    
+    if len(packet.args) != 1:
+        message = communication.System()
+        message.text = "This command expects exactly one parameter, the channel you wish to switch to.\n"
+        message.text += "An example of the correct use of this command is: /switch general"
+        await websocket.send(message.json)
+        return # exit the function here
+    
     # if there are any invalid characters in the channel name
     if any(char in packet.args[0] for char in INVALID_CHARS):
         message = communication.System()
