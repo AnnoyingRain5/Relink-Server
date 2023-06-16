@@ -26,6 +26,7 @@ else:
 
 COMMANDS = ['switch']
 
+
 class preferences():
     '''Main preferences class
 
@@ -72,6 +73,7 @@ class User():
 
 # init constants
 
+
  # characters that should be considered invalid for channel names and usernames
 INVALID_CHARS = ("!", "#", "$", "%", "^", "&", "'", '"', "*", "(", ")",
                  "<", ">", "/", "\\", "[", "]", "|", " ", ",", "~", "`", "+")
@@ -84,6 +86,7 @@ prefs = preferences()
 users: dict[WebSocketServerProtocol, User] = {}
 messages = []
 
+
 async def RegenerateUserLists():
     for userWebsocket, user in users.items():
         message = communication.UserList()
@@ -94,6 +97,7 @@ async def RegenerateUserLists():
                 message.channelList.append(otherUser.username)
         print(message.json)
         await userWebsocket.send(message.json)
+
 
 async def server(websocket: WebSocketServerProtocol):
     '''Main function, handles recieving packets and calling the appropriate function depending on packet type'''
@@ -111,6 +115,7 @@ async def server(websocket: WebSocketServerProtocol):
                 else:  # it must be a command
                     cmdname = communication.packet(
                         rawpacket).name.lower()  # type: ignore
+                    # always override the switch command, to ensure that people don't get trapped in other servers
                     if cmdname == "switch":
                         await commandHandler(websocket, packet)
                     else:
@@ -231,8 +236,6 @@ async def commandHandler(websocket: WebSocketServerProtocol, packet: communicati
             await websocket.send(message.json)
 
 
-
-
 async def FederationHandler(websocket: WebSocketServerProtocol, packet: communication.FederationRequest):
     '''Handles other servers attempting to federate to this one'''
     # create a user object
@@ -282,8 +285,6 @@ async def switchcommand(websocket: WebSocketServerProtocol, packet: communicatio
     message.channel = packet.args[0]
     await websocket.send(message.json)
     await RegenerateUserLists()
-
-
 
 
 async def loginHandler(websocket: WebSocketServerProtocol, packet: communication.LoginRequest):
@@ -363,6 +364,7 @@ async def signupHandler(websocket: WebSocketServerProtocol, packet: communicatio
         result.result = False
         result.reason = "Username is already in use"
         await websocket.send(result.json)
+
 
 async def main():
     '''Inital function, starts the server using the Websockets library'''
